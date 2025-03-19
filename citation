@@ -1,0 +1,14 @@
+CITATION.cff
+  ---
+citations:
+  - type: software
+    authors:
+      - family-names: Noelia Valderrama-Bhraunxs
+        given-names: ""
+    title: "citizen-expert-snail-prediction"
+    version: "1.0"
+    url: "https://github.com/ndcvb/citizen-expert-snail-prediction"
+    date-released: "2025-03-19"
+    access-date: "2025-03-19"
+    publisher: "GitHub"
+    identifier: "https://github.com/ndcvb/citizen-expert-snail-prediction"
