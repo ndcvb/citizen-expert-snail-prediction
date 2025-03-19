@@ -1,0 +1,207 @@
+---
+title: "Filter_data"
+author: "Noelia Valderrama Bhraunxs"
+date: "2024-04-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data filter protocol
+
+These are the steps to filter the original data from the citizen scientists of the ATRAP project (Action Towards Reducing Aquatic snail-borne Parasitic diseases).
+
+### Filters included: 
+ + No sampling (1)
+ + Dates outside sampling range (2)
+ + GPS accuracy exclusion (>5 meters) (3)
+ + *Congo: Matching (locations) / Uganda : No action
+ + GPS location exclusion (>200 meters) (4)
+ + No NAs for bio snail reports (5)
+
+The original data file has this format : Country_original.csv and refers to the data submitted by the citizens and manually validated by the expert.
+
+```{r, warning=FALSE, message=FALSE}
+# Libraries
+library(dplyr)
+library(geosphere)
+
+
+```
+
+
+```{r}
+
+# Reading data: 
+
+data_original = read.csv("~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/D_Uganda_checked.csv", sep = ",", header = TRUE)
+
+original_coordinates = read.csv("~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/Clean/Watercontact_sites.csv", sep = ",", header = TRUE)
+
+# 1. Filter reports of citizens no sampling (Reading GPS location as an indication) [959]
+
+data_1 = data_original  %>%
+  filter(!is.na(X_Take.a.GPS.point_latitude)) 
+
+# 2. Dates (outside the range)
+
+data_2 <- data_1 %>%
+  filter(!today < '2020-03-01' | today > '2023-02-20')
+
+# 3. GPS accuracy exclusion (>5 meters)
+
+data_3 <- data_2 %>%
+  filter(X_Take.a.GPS.point_precision<=5)
+
+# 4. GPS location exclusion (>200 meters) 
+
+  # 4.1. Join original coordinates to each Watercontact site 
+
+ data_3_join = left_join(data_3, original_coordinates,'Watercontactsite')
+
+  # 4.2. Calculate distance to the original coordinates, and create new column called distance 
+ 
+ data_3_join$distance <- mapply(function(lon1, lat1, lon2, lat2) {
+  distm(matrix(c(lon1, lat1), ncol = 2),
+        matrix(c(lon2, lat2), ncol = 2),
+        fun = distHaversine)
+}, data_3_join$X_Take.a.GPS.point_longitude, data_3_join$X_Take.a.GPS.point_latitude,
+data_3_join$longitude, data_3_join$latitude)
+
+  # 4.2. Filter locations >200 m away 
+
+data_4 <- data_3_join %>%
+  filter(distance<=200)
+
+# 5. Filter NAs for bio snail reports
+
+data_5 <- data_4 %>%
+  filter(!is.na(What.is.the.number.of.Biomphalaria.specimens...example.shown.below.))
+
+
+# 6. Bio error --> 
+print(sum(data_5$Bio_Error))
+
+# this will be excluded 
+
+data_5a <- data_5 %>%
+  filter(Bio_Error==0)
+
+# Output will be saved as Country_activities.csv
+
+#write.csv(data_5a, "~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/Uganda_activities.csv")
+
+```
+
+## Second filter (for snail occurrence)
+
+Following with the discussion of sampling duration between 15-60 minutes | Sampling between 20-60 minutes, two datasets are created. Each of them with also 20 observations per Watercontact site. 
+
+
+```{r}
+
+# First calculate the sampling time using 5a
+
+start_hour <- sub("^(\\d{2}:\\d{2}).*", "\\1", data_5a$What.is.the.time.now.)
+final_hour  = sub("^(\\d{2}:\\d{2}).*", "\\1", data_5a$You.are.done.scooping..What.is.the.time.now.)
+
+# Function to convert time strings to minutes
+time_to_minutes <- function(time_str) {
+  hm <- strsplit(time_str, ":")[[1]]
+  return(as.integer(hm[1]) * 60 + as.integer(hm[2]))
+}
+
+# Convert time vectors to minutes
+minutes_vector1 <- sapply(final_hour, time_to_minutes)
+minutes_vector2 <- sapply(start_hour, time_to_minutes)
+
+data_5a$time_diff_minutes <- minutes_vector1 - minutes_vector2
+
+data_6a = data_5a  %>%
+  filter(!(time_diff_minutes > 60 | time_diff_minutes < 20))
+
+#data_6b = data_5a  %>%
+#  filter(!(time_diff_minutes > 60 | time_diff_minutes < 15))
+
+# Filter number of points per locations (at least 20)
+
+# Process duplicates, just keep the first sampling instance 
+
+library(dplyr)
+
+data_7a <- data_6a %>%
+  group_by(Watercontactsite, today) %>%
+  slice_head(n = 1) %>%  # Keep only the first row per group
+  ungroup()
+
+locations_7a =  data_7a %>%
+  group_by(Watercontactsite) %>%
+  summarize(
+    n =  n()
+  )
+
+data_7ab <- data_7a %>%
+  inner_join(locations_7a %>% filter(n >= 20), by = "Watercontactsite")
+
+#data_7ax <- data_7a %>%
+#  inner_join(locations_7a %>% filter(n >= 10), by = "Watercontactsite")
+
+
+# Same number of locations, with 120 more obs in total for 6bb
+
+nrow(table(data_7ab$Watercontactsite))
+
+
+
+# Expert data filtering 
+
+data_original_expert = read.csv("~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/Expert_data.csv", sep = ",", header = TRUE)
+
+names(data_original_expert)[names(data_original_expert)=='Site_J'] = 'Watercontactsite'
+
+# Convert categorical variables to factors
+data_original_expert$Site.type <- as.factor(data_original_expert$Site.type)
+
+data_original_expert
+
+expert_data_filtered = data_original_expert %>% group_by(Watercontactsite) %>% filter(n()>10) %>% ungroup()
+
+# Only keep sites that are in both datasets 
+
+common_sites <- intersect(expert_data_filtered$Watercontactsite, data_7ab$Watercontactsite)
+
+#common_sites_x = intersect(expert_data_filtered$Watercontactsite, data_6ax$Watercontactsite)
+
+# Filter both datasets to keep only rows with common Watercontactsite values
+ex_data <- expert_data_filtered[expert_data_filtered$Watercontactsite %in% common_sites, ]
+cs_data <- data_7ab[data_7ab$Watercontactsite %in% common_sites, ]
+
+
+# This is with the filter of only 10 
+#cs_data_x <- data_6ax[data_6ax$Watercontactsite %in% common_sites_x, ]
+
+nrow(table(ex_data$Watercontactsite))
+
+table(expert_data_filtered$Site.type)
+
+
+
+# Write outputs 
+
+# Format Country_15m_snails.csv - Considering 15m-60 / Country_20m_snails.csv - Considering 20 min as lower limit
+
+write.csv(ex_data, "~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/Clean/D_ex_filtered.csv")
+
+write.csv(cs_data, "~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/Clean/D_cs_filtered.csv")
+
+#write.csv(cs_data_x, "~/Library/CloudStorage/OneDrive-KULeuven/Uganda_Congo/Data/Uganda/D_cs_filtered_10.csv")
+
+
+
+```
+
+

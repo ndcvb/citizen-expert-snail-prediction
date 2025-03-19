@@ -1,0 +1,101 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2761
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 // You will need 2 variables \
+// lakesites is your bufferclips_dissolved \
+// lakeshores is your lake polygon\
+\
+\
+print(lakesites);\
+function maskS2clouds(image) \{\
+  var qa = image.select('QA60');\
+\
+  // Bits 10 and 11 are clouds and cirrus, respectively.\
+  var cloudBitMask = 1 << 10;\
+  var cirrusBitMask = 1 << 11;\
+\
+  // Both flags should be set to zero, indicating clear conditions.\
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)\
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));\
+\
+  return image.updateMask(mask).divide(10000);\
+\}\
+\
+var S2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate('2020-02-01', '2023-12-31').filterBounds(lakeshores).filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',20)); \
+var S2mask = S2.map(maskS2clouds);\
+print(S2mask);\
+\
+\
+// Function to calculate and add an NDVI band\
+var addNDVI = function(image) \{\
+  return image.addBands(image.normalizedDifference(['B8', 'B4']).rename('NDVI'));\
+\};\
+\
+// Function to calculate and add an NDWI band\
+var addNDWI = function(image) \{\
+  return image.addBands(image.normalizedDifference(['B8', 'B3']).rename('NDWI'));\
+\};\
+\
+// Function to calculate and add a Turbidity band\
+var addTURB = function(image) \{\
+  return image.addBands(image.normalizedDifference(['B3', 'B4']).rename('Turbidity'));\
+\};\
+\
+// Apply the functions to add NDVI, NDWI, and Turbidity bands\
+var S2 = S2.map(addNDVI).map(addNDWI).map(addTURB);\
+print(S2);\
+\
+// Select bands and calculate the 10th percentile (q10)\
+var NDVIq10 = S2.select(['NDVI']).reduce(ee.Reducer.percentile([10]));\
+var NDWIq10 = S2.select(['NDWI']).reduce(ee.Reducer.percentile([10]));\
+var TURBq90 = S2.select(['Turbidity']).reduce(ee.Reducer.percentile([90]));\
+\
+// Print the results\
+print('NDVI q10:', NDVIq10);\
+print('NDWI q10:', NDWIq10);\
+print('Turbidity q90:', TURBq90);\
+\
+// Create time series charts for each index\
+var plotNDVI = ui.Chart.image.seriesByRegion(S2, lakesites, ee.Reducer.percentile([10]),\
+  'NDVI', 10, 'system:time_start', 'Waterconta')\
+              .setChartType('LineChart').setOptions(\{\
+                title: 'NDVI q10 Time Series',\
+                hAxis: \{title: 'Date'\},\
+                vAxis: \{title: 'NDVI'\}\
+\});\
+print(plotNDVI);\
+\
+var plotNDWI = ui.Chart.image.seriesByRegion(S2, lakesites, ee.Reducer.percentile([10]),\
+  'NDWI', 10, 'system:time_start', 'Waterconta')\
+              .setChartType('LineChart').setOptions(\{\
+                title: 'NDWI q10 Time Series',\
+                hAxis: \{title: 'Date'\},\
+                vAxis: \{title: 'NDWI'\}\
+\});\
+print(plotNDWI);\
+\
+var plotTURB = ui.Chart.image.seriesByRegion(\{\
+  imageCollection: S2, \
+  regions: lakesites, \
+  reducer: ee.Reducer.percentile([90]),\
+  band: 'Turbidity',\
+  scale: 10,\
+  xProperty: 'system:time_start',\
+  seriesProperty: 'Waterconta' // This sets the line labels to the Waterconta values\
+\})\
+.setChartType('LineChart')\
+.setOptions(\{\
+  title: 'Turbidity q90 Time Series',\
+  hAxis: \{title: 'Date'\},\
+  vAxis: \{title: 'Turbidity'\},\
+  lineWidth: 2\
+\});\
+\
+print(plotTURB);\
+\
+\
+}
