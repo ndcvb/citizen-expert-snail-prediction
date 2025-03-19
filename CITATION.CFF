@@ -1,20 +1,10 @@
-  ---
-# Metadata for citation of this software according to the CFF format (https://citation-file-format.github.io/)
----
-authors:
-  -
-    affiliation: "KU Leuven"
-    family-names: Valderrama-Bhraunxs
-    given-names: Noelia
-    orcid: "https://orcid.org/0000-0002-1804-6715"
-  -
-date-released: 2025-03-19
-license: MIT
+cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-repository-code: "https://github.com/ndcvb/citizen-expert-snail-prediction"
+authors:
+- family-names: "Valderrama-Bhraunxs"
+  given-names: "Noelia"
+  orcid: "https://orcid.org/0000-0002-1804-6715"
 title: "Citizen - expert: snail prediction"
-keywords:
-  - "citizen science"
-  - "snail-borne diseases"
-  - "data validation"
-version: "1.0"
+version: 1.0
+date-released: 2025-03-19
+url: "https://github.com/ndcvb/citizen-expert-snail-prediction"
